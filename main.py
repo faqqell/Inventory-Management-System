@@ -22,6 +22,34 @@ class ProductResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+@app.post("/products", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
+def create_product(product_in: ProductCreate, db: Session = Depends(get_db)):
+    # Проверяем, существует ли товар с таким же SKU
+    existing_product = db.query(Product).filter(Product.sku == product_in.sku).first()
+    if existing_product:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Product with this SKU already exists"
+        )
+    
+    db_product = Product(
+        sku=product_in.sku,
+        name=product_in.name,
+        price=product_in.price
+    )
+    
+    db.add(db_product)
+    db.commit()
+    db.refresh(db_product)
+    
+    return db_product
+
+
+@app.get("/products", response_model=List[ProductResponse])
+def get_products(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    products = db.query(Product).offset(skip).limit(limit).all()
+    return products
+
 def main() -> None:
     with psycopg.connect(
         host=os.getenv("POSTGRES_HOST", "localhost"),
